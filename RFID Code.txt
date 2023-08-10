@@ -1,3 +1,8 @@
+https://lastminuteengineers.com/how-rfid-works-rc522-arduino-tutorial/
+
+
+
+
 #include <SPI.h>      //include the SPI bus library
 #include <MFRC522.h>  //include the RFID reader library
 
