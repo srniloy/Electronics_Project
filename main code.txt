@@ -2,13 +2,14 @@
 #include <MFRC522.h>
 #include <Servo.h>
 #include <LiquidCrystal_I2C.h>
+#include <dht.h>
 
 
 LiquidCrystal_I2C lcd(0x27,16,2);
 
 
 #define SS_PIN 53
-#define RST_PIN 24
+#define RST_PIN 48
 
 Servo Servo1;
 Servo Servo2;
@@ -18,11 +19,14 @@ int pos = 0;
 String tagId = "";
 String MasterTag = "63B6C72E";
 
-uint8_t BlueLightPin = 12;
-uint8_t RedLightPin = 13;
-uint8_t BuzzerPin = 11;
-uint8_t ServoPin1 = 7;
-uint8_t ServoPin2 = 6;
+uint8_t BlueLightPin = 11;
+uint8_t RedLightPin = 10;
+uint8_t BuzzerPin = 9;
+uint8_t ServoPin1 = 12;
+uint8_t ServoPin2 = 13;
+uint8_t DHT_Pin = 8;
+
+dht DHT11;
 
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 // MFRC522::MIFARE_key key;
@@ -54,7 +58,31 @@ void setup() {
 
 }
 
+
+void temp_sensor(){
+  lcd.clear();
+  lcd.setCursor(0,0); 
+  lcd.print("Temp = ");
+  lcd.print(DHT11.temperature);
+
+  lcd.setCursor(0,1); 
+  lcd.print("Hdt = ");
+  lcd.print(DHT11.humidity);
+  lcd.print("%");
+
+  delay(2000);
+}
+
 void loop() {
+  int chk = DHT11.read11(DHT_Pin);
+  Serial.println(chk);
+  if(chk){
+    temp_sensor();
+  }
+  
+  
+
+
   pos = 0;
   Servo1.write(pos);  
   if( ! mfrc522.PICC_IsNewCardPresent()){
