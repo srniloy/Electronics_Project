@@ -17,7 +17,10 @@ int pos = 0;
 
 
 String tagId = "";
-String MasterTag = "63B6C72E";
+String VisitorID = "63B6C72E";
+String StaffId = "E059CE19";
+String Display_1st_line = "";
+String Display_2nd_line = "";
 
 uint8_t BlueLightPin = 11;
 uint8_t RedLightPin = 10;
@@ -25,6 +28,7 @@ uint8_t BuzzerPin = 9;
 uint8_t ServoPin1 = 12;
 uint8_t ServoPin2 = 13;
 uint8_t DHT_Pin = 8;
+uint8_t Patient_Arrival_Signal_Pin = 6;
 
 dht DHT11;
 
@@ -35,6 +39,7 @@ void setup() {
   pinMode(BlueLightPin, OUTPUT);  
   pinMode(RedLightPin, OUTPUT);  
   pinMode(BuzzerPin, OUTPUT);  
+  pinMode(Patient_Arrival_Signal_Pin, INPUT_PULLUP);  
 
   Servo1.attach(ServoPin1);
   Servo2.attach(ServoPin2);
@@ -64,6 +69,8 @@ void temp_sensor(){
   lcd.setCursor(0,0); 
   lcd.print("Temp = ");
   lcd.print(DHT11.temperature);
+  lcd.print((char)223);
+  lcd.print("C");
 
   lcd.setCursor(0,1); 
   lcd.print("Hdt = ");
@@ -73,18 +80,65 @@ void temp_sensor(){
   delay(2000);
 }
 
-void loop() {
-  int chk = DHT11.read11(DHT_Pin);
-  Serial.println(chk);
-  if(chk){
-    temp_sensor();
+
+
+int i = 0;
+bool P_arrival_state = 0;
+uint8_t p_signal = 0;
+bool current_visiting_state = 0;
+bool One_time_flag = 1;
+bool visitor_inter_exit_flag = 0;
+uint8_t visitor_no = 1;
+
+
+int visiting_time = 1000*15; // set visiting time for 15 sec
+unsigned long visiting_finish_time = 0;
+unsigned long Total_Milis_From_Start = millis();
+
+// --------------------------------------------- Visiting Management Function ----------------------------------------->
+
+void Visiting_Management(){
+  p_signal = digitalRead(Patient_Arrival_Signal_Pin);
+
+  
+  if(!current_visiting_state && !P_arrival_state && One_time_flag){
+    lcd.clear();
+    lcd.setCursor(0,0); 
+    lcd.print((String)"Visitor #"+visitor_no+", be");
+    lcd.setCursor(0,1);
+    lcd.print("ready to enter");
+
+    One_time_flag = 0;
+    delay(5000);
+
+    Display_1st_line = (String)"#"+visitor_no+", Wait for the";
+    Display_2nd_line = "patient to enter";
+    lcd.clear();
+    lcd.setCursor(0,0); 
+    lcd.print(Display_1st_line);
+    lcd.setCursor(0,1); 
+    lcd.print(Display_2nd_line);
+    visitor_inter_exit_flag = 0;
   }
-  
-  
+  if(p_signal == LOW && !P_arrival_state){ // when switch is on
+    Display_1st_line = "Patient arrived ";
+    Display_2nd_line = "you can enter";
+    lcd.clear();
+    lcd.setCursor(0,0); 
+    lcd.print(Display_1st_line);
+    lcd.setCursor(0,1); 
+    lcd.print(Display_2nd_line);
+    P_arrival_state = 1;
+  }
+}
 
 
-  pos = 0;
-  Servo1.write(pos);  
+
+// --------------------------------------------- RFID Reading Function ----------------------------------------->
+
+
+
+void RFID_Reading(){
   if( ! mfrc522.PICC_IsNewCardPresent()){
     return;
   }
@@ -93,6 +147,7 @@ void loop() {
     return;
   }
 
+  // RFID card id scanning ...
   tagId = "";
   for(int i=0; i<4; i++){
     tagId.concat(String(mfrc522.uid.uidByte[i], HEX));
@@ -100,55 +155,48 @@ void loop() {
   tagId.toUpperCase();
   Serial.println(tagId);
 
-  if(tagId == MasterTag){
-    Serial.println("Matched");
+
+  if(tagId == VisitorID && P_arrival_state){
     digitalWrite(RedLightPin, HIGH);
     digitalWrite(BlueLightPin, LOW);
-    tone(BuzzerPin, 1000);
-    delay(80);
-    noTone(BuzzerPin);
-    delay(40);
-    tone(BuzzerPin, 1000);
-    delay(80);
-    noTone(BuzzerPin);
+    tone(BuzzerPin, 1000, 80);
+    delay(120);
+    tone(BuzzerPin, 1000, 80);
 
     lcd.clear();  
     lcd.setCursor(0,0);   //Set cursor to character 2 on line 0
     lcd.print("Opening Visiting");
     lcd.setCursor(0,1);   //Set cursor to character 2 on line 0
-    lcd.print("Door");
+    lcd.print("Room's Door");
 
-    Servo1.write(90);  
     
+    // opening door using servo motor (SG90)
 
-    for (pos = 0; pos <= 90; pos += 3) { // goes from 0 degrees to 180 degrees
-    // in steps of 1 degree
-      Servo1.write(pos);              // tell servo to go to position in variable 'pos'
+    for (pos = 0; pos <= 90; pos += 3) { 
+      Servo1.write(pos);          
       Serial.println(pos);
-      delay(15);                       // waits 15ms for the servo to reach the position
+      delay(15);  
     }
     delay(800);
     digitalWrite(BlueLightPin, HIGH);
     digitalWrite(RedLightPin, HIGH);
     delay(1000);
-    for (pos = 90; pos >= 0; pos -= 3) { // goes from 180 degrees to 0 degrees
+    for (pos = 90; pos >= 0; pos -= 3) {
       Serial.println(pos);
-      Servo1.write(pos);              // tell servo to go to position in variable 'pos'
-      delay(15);                       // waits 15ms for the servo to reach the position
+      Servo1.write(pos);              
+      delay(15);                       
     }
-     
-    
 
-
+    visiting_finish_time = Total_Milis_From_Start + visiting_time;
+    visitor_inter_exit_flag = 1;
+    One_time_flag = 1;
   }
-  else{
-    Serial.println("Mismatched");
-    digitalWrite(BlueLightPin, HIGH);
-    digitalWrite(RedLightPin, LOW);
-    tone(BuzzerPin, 1000);
-    delay(500);
-    noTone(BuzzerPin);
-
+  else if(tagId == StaffId){
+    digitalWrite(RedLightPin, HIGH);
+    digitalWrite(BlueLightPin, LOW);
+    tone(BuzzerPin, 1000, 80);
+    delay(120);
+    tone(BuzzerPin, 1000, 80);
 
     lcd.clear();  
     lcd.setCursor(0,0);   //Set cursor to character 2 on line 0
@@ -167,9 +215,141 @@ void loop() {
     Servo2.write(pos);              // tell servo to go to position in variable 'pos'
     delay(10);                       // waits 15ms for the servo to reach the position
     }
+
+    lcd.clear();  
+    lcd.setCursor(0,0);   //Set cursor to character 2 on line 0
+    lcd.print(Display_1st_line);
+    lcd.setCursor(0,1);   //Set cursor to character 2 on line 0
+    lcd.print(Display_2nd_line);
+  }
+  else{
+    digitalWrite(BlueLightPin, HIGH);
+    digitalWrite(RedLightPin, LOW);
+    tone(BuzzerPin, 1000);
+    delay(500);
+    noTone(BuzzerPin);
+
+    lcd.clear();  
+    lcd.setCursor(0,0);   //Set cursor to character 2 on line 0
+    lcd.print("Invalid Request");
+
+    delay(2000);
+
+    lcd.clear();  
+    lcd.setCursor(0,0);   //Set cursor to character 2 on line 0
+    lcd.print(Display_1st_line);
+    lcd.setCursor(0,1);   //Set cursor to character 2 on line 0
+    lcd.print(Display_2nd_line);
   }
   mfrc522.PICC_HaltA();
 
+}
+
+
+
+
+
+//------------------------------------------------ Loop Start From Here ------------------------------------>
+
+void loop() {
+  Total_Milis_From_Start = millis();
+  
+  Visiting_Management();
   
 
+  RFID_Reading(); // RFID Scanning
+
+
+  // Serial.print("visiting_finish_time: ");
+  // Serial.println(visiting_finish_time);
+  // Serial.print("Total_Milis_From_Start: ");
+  // Serial.println(Total_Milis_From_Start);
+
+  if(visitor_inter_exit_flag && One_time_flag){
+
+    Display_1st_line = (String)"Visitor #"+visitor_no+" is";
+    Display_2nd_line = "visiting patient";
+    lcd.clear();
+    lcd.setCursor(0,0);   //Set cursor to character 2 on line 0
+    lcd.print(Display_1st_line);
+    lcd.setCursor(0,1);   //Set cursor to character 2 on line 0
+    lcd.print(Display_2nd_line);
+    One_time_flag = 0;
+  }
+  
+  if(visiting_finish_time <= Total_Milis_From_Start && visitor_inter_exit_flag){
+    P_arrival_state = 0;
+    One_time_flag = 1;
+    visitor_no++;
+    Serial.println("Here");
+  }
+
+  delay(200);
+
+  
+  // if(i < 100){
+  //   int chk = DHT11.read11(DHT_Pin);
+  //   Serial.print("chk: ");
+  //   Serial.println(chk);
+  //   if(chk){
+  //     temp_sensor();
+  //   }
+  //     i++;
+
+  // }
+  
+  
+
+
+    
+
+
 }
+
+
+
+
+
+
+
+
+
+
+
+  // pos = 0;
+
+
+
+  // else{
+  //   Serial.println("Mismatched");
+  //   digitalWrite(BlueLightPin, HIGH);
+  //   digitalWrite(RedLightPin, LOW);
+  //   tone(BuzzerPin, 1000);
+  //   delay(500);
+  //   noTone(BuzzerPin);
+
+
+  //   lcd.clear();  
+  //   lcd.setCursor(0,0);   //Set cursor to character 2 on line 0
+  //   lcd.print("Opening Staff");
+  //   lcd.setCursor(0,1);   //Set cursor to character 2 on line 0
+  //   lcd.print("Door");
+
+
+  //   Serial.println(pos);
+  //   Servo2.write(95);   
+  //   delay(800);
+  //   digitalWrite(BlueLightPin, HIGH);
+  //   digitalWrite(RedLightPin, HIGH);
+  //   delay(1500);
+  //   for (pos = 90; pos >= 0; pos -= 10) { // goes from 180 degrees to 0 degrees
+  //   Servo2.write(pos);              // tell servo to go to position in variable 'pos'
+  //   delay(10);                       // waits 15ms for the servo to reach the position
+  //   }
+  // }
+  // 
+
+
+
+
+
