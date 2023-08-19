@@ -24,22 +24,29 @@ String Display_2nd_line = "";
 
 uint8_t BlueLightPin = 11;
 uint8_t RedLightPin = 10;
+uint8_t RoomLightPin = 3;
+uint8_t RoomFanPin = 4;
 uint8_t BuzzerPin = 9;
 uint8_t ServoPin1 = 12;
 uint8_t ServoPin2 = 13;
 uint8_t DHT_Pin = 8;
+uint8_t PIR_Pin = 7;
 uint8_t Patient_Arrival_Signal_Pin = 6;
+uint8_t Emergency_Button_pin = 5;
 
 dht DHT11;
 
 MFRC522 mfrc522(SS_PIN, RST_PIN);
-// MFRC522::MIFARE_key key;
 
 void setup() {
   pinMode(BlueLightPin, OUTPUT);  
   pinMode(RedLightPin, OUTPUT);  
+  pinMode(RoomLightPin, OUTPUT);  
+  pinMode(RoomFanPin, OUTPUT);  
   pinMode(BuzzerPin, OUTPUT);  
+  pinMode(PIR_Pin, INPUT);  
   pinMode(Patient_Arrival_Signal_Pin, INPUT_PULLUP);  
+  pinMode(Emergency_Button_pin, INPUT_PULLUP);  
 
   Servo1.attach(ServoPin1);
   Servo2.attach(ServoPin2);
@@ -64,25 +71,9 @@ void setup() {
 }
 
 
-void temp_sensor(){
-  lcd.clear();
-  lcd.setCursor(0,0); 
-  lcd.print("Temp = ");
-  lcd.print(DHT11.temperature);
-  lcd.print((char)223);
-  lcd.print("C");
-
-  lcd.setCursor(0,1); 
-  lcd.print("Hdt = ");
-  lcd.print(DHT11.humidity);
-  lcd.print("%");
-
-  delay(2000);
-}
 
 
 
-int i = 0;
 bool P_arrival_state = 0;
 uint8_t p_signal = 0;
 bool current_visiting_state = 0;
@@ -164,9 +155,9 @@ void RFID_Reading(){
     tone(BuzzerPin, 1000, 80);
 
     lcd.clear();  
-    lcd.setCursor(0,0);   //Set cursor to character 2 on line 0
+    lcd.setCursor(0,0); 
     lcd.print("Opening Visiting");
-    lcd.setCursor(0,1);   //Set cursor to character 2 on line 0
+    lcd.setCursor(0,1);  
     lcd.print("Room's Door");
 
     
@@ -199,27 +190,26 @@ void RFID_Reading(){
     tone(BuzzerPin, 1000, 80);
 
     lcd.clear();  
-    lcd.setCursor(0,0);   //Set cursor to character 2 on line 0
+    lcd.setCursor(0,0);
     lcd.print("Opening Staff");
-    lcd.setCursor(0,1);   //Set cursor to character 2 on line 0
+    lcd.setCursor(0,1);
     lcd.print("Door");
 
 
-    Serial.println(pos);
     Servo2.write(95);   
     delay(800);
     digitalWrite(BlueLightPin, HIGH);
     digitalWrite(RedLightPin, HIGH);
     delay(1500);
-    for (pos = 90; pos >= 0; pos -= 10) { // goes from 180 degrees to 0 degrees
-    Servo2.write(pos);              // tell servo to go to position in variable 'pos'
-    delay(10);                       // waits 15ms for the servo to reach the position
+    for (pos = 90; pos >= 0; pos -= 10) { 
+    Servo2.write(pos);         
+    delay(10);                      
     }
 
     lcd.clear();  
-    lcd.setCursor(0,0);   //Set cursor to character 2 on line 0
+    lcd.setCursor(0,0); 
     lcd.print(Display_1st_line);
-    lcd.setCursor(0,1);   //Set cursor to character 2 on line 0
+    lcd.setCursor(0,1); 
     lcd.print(Display_2nd_line);
   }
   else{
@@ -230,18 +220,109 @@ void RFID_Reading(){
     noTone(BuzzerPin);
 
     lcd.clear();  
-    lcd.setCursor(0,0);   //Set cursor to character 2 on line 0
+    lcd.setCursor(0,0);
     lcd.print("Invalid Request");
 
     delay(2000);
 
     lcd.clear();  
-    lcd.setCursor(0,0);   //Set cursor to character 2 on line 0
+    lcd.setCursor(0,0);  
     lcd.print(Display_1st_line);
-    lcd.setCursor(0,1);   //Set cursor to character 2 on line 0
+    lcd.setCursor(0,1);  
     lcd.print(Display_2nd_line);
   }
   mfrc522.PICC_HaltA();
+
+}
+
+
+// --------------------------------------------- Emergency Button Function ----------------------------------------->
+
+
+
+void Emergency_Button(){
+  uint8_t emergency_signal = digitalRead(Emergency_Button_pin);
+
+  if(!emergency_signal){
+    lcd.clear();  
+    lcd.setCursor(0,0);   
+    lcd.print("Emergency");
+    lcd.setCursor(0,1);   
+    lcd.print("Situation !");
+
+    uint8_t i = 0;
+    Servo2.write(95);   
+    delay(800);
+    for (pos = 90; pos >= 0; pos -= 10) { 
+    Servo2.write(pos);         
+    delay(10);                      
+    }
+    for(i=0; i<3; i++){
+      digitalWrite(RedLightPin, LOW);
+      tone(BuzzerPin, 1000, 500);
+      delay(700);
+      digitalWrite(RedLightPin, HIGH);
+      tone(BuzzerPin, 1000, 500);
+      delay(700);
+    }
+
+    lcd.clear();  
+    lcd.setCursor(0,0);  
+    lcd.print(Display_1st_line);
+    lcd.setCursor(0,1);   
+    lcd.print(Display_2nd_line);
+    
+  }
+}
+
+
+//------------------------------------------------ Room Automation Function ------------------------------------>
+
+uint8_t pir_signal = 0;
+uint8_t light_state = 0;
+uint8_t temp_state = 0;
+uint8_t fan_on_off_flag = 0;
+unsigned long light_finish_time = 0;
+unsigned long temp_read_delay_time = 0;
+
+
+void Room_Automation(){
+  pir_signal = digitalRead(PIR_Pin);
+  // Serial.print("pir_signal = ");
+  // Serial.println(pir_signal);
+  if(light_finish_time <= Total_Milis_From_Start){
+    if(pir_signal){
+      digitalWrite(RoomLightPin, HIGH);
+      light_finish_time = Total_Milis_From_Start + 8000;
+    }
+    else
+      digitalWrite(RoomLightPin, LOW);
+  }
+
+
+  if(temp_read_delay_time <= Total_Milis_From_Start){
+    DHT11.read11(DHT_Pin);
+
+    if(DHT11.temperature > 31){
+      if(!temp_state)
+        temp_state = 1;
+    }
+    else
+      if(temp_state)
+        temp_state = 0;
+
+    if(temp_state && !fan_on_off_flag){
+      digitalWrite(RoomFanPin, HIGH);
+      fan_on_off_flag = 1;
+    }
+    else if(!temp_state && fan_on_off_flag){
+      digitalWrite(RoomFanPin, LOW);
+      fan_on_off_flag = 0;
+    }
+    Serial.print("Temp = ");
+    Serial.println(DHT11.temperature);
+    temp_read_delay_time = Total_Milis_From_Start + 1500;
+  }
 
 }
 
@@ -253,26 +334,22 @@ void RFID_Reading(){
 
 void loop() {
   Total_Milis_From_Start = millis();
-  
+  Room_Automation();
   Visiting_Management();
-  
 
   RFID_Reading(); // RFID Scanning
 
+  Emergency_Button();
 
-  // Serial.print("visiting_finish_time: ");
-  // Serial.println(visiting_finish_time);
-  // Serial.print("Total_Milis_From_Start: ");
-  // Serial.println(Total_Milis_From_Start);
 
   if(visitor_inter_exit_flag && One_time_flag){
 
     Display_1st_line = (String)"Visitor #"+visitor_no+" is";
     Display_2nd_line = "visiting patient";
     lcd.clear();
-    lcd.setCursor(0,0);   //Set cursor to character 2 on line 0
+    lcd.setCursor(0,0);   
     lcd.print(Display_1st_line);
-    lcd.setCursor(0,1);   //Set cursor to character 2 on line 0
+    lcd.setCursor(0,1);   
     lcd.print(Display_2nd_line);
     One_time_flag = 0;
   }
@@ -284,19 +361,10 @@ void loop() {
     Serial.println("Here");
   }
 
-  delay(200);
+  // delay(100);
 
   
-  // if(i < 100){
-  //   int chk = DHT11.read11(DHT_Pin);
-  //   Serial.print("chk: ");
-  //   Serial.println(chk);
-  //   if(chk){
-  //     temp_sensor();
-  //   }
-  //     i++;
 
-  // }
   
   
 
